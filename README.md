@@ -44,6 +44,9 @@ Text is read as UTF-8, UTF-16 with a byte order mark, or else Windows-1252, and 
 was found, including CR LF line ends. Binary files open read-only: their text runs stay readable
 and searchable, other bytes show as dots.
 
+Plume registers the type `text/x-bitbake` for `.bb`, `.bbappend` and `.bbclass` files, so a
+file manager can open recipes with it.
+
 Unsaved texts are kept in `~/.local/share/plume/drafts` and the open tabs in
 `~/.local/state/plume/session.toml`, so quitting never asks and never loses anything. Closing a
 single tab with unsaved changes does ask.

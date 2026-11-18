@@ -126,4 +126,5 @@ install_subdir(noctalia_ui_assets_dir / 'fonts', install_dir: get_option('datadi
 install_data('assets/templates/colors.toml', install_dir: get_option('datadir') / 'plume/templates')
 install_data('assets/desktop/de.flk.Plume.desktop', install_dir: get_option('datadir') / 'applications')
 install_data('assets/icons/de.flk.Plume.svg', install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
+install_data('assets/mime/de.flk.Plume.xml', install_dir: get_option('datadir') / 'mime/packages')
 install_data('LICENSE', install_dir: get_option('datadir') / 'licenses/plume')

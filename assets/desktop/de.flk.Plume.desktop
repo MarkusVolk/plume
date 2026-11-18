@@ -7,6 +7,6 @@ Exec=plume %F
 Icon=de.flk.Plume
 Terminal=false
 Categories=Utility;TextEditor;
-MimeType=text/plain;application/x-zerosize;
+MimeType=text/plain;application/x-zerosize;text/x-bitbake;application/toml;application/yaml;application/json;application/xml;text/xml;application/x-desktop;text/x-systemd-unit;text/x-dbus-service;text/x-log;text/x-patch;text/x-shellscript;application/x-shellscript;text/markdown;text/csv;text/x-csrc;text/x-chdr;text/x-c++src;text/x-c++hdr;text/x-python;text/x-lua;text/rust;text/x-meson;text/x-cmake;text/x-makefile;text/css;text/javascript;text/html;text/x-qml;text/x-scheme;
 Keywords=text;editor;notes;write;
 StartupWMClass=de.flk.Plume
