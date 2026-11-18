@@ -1333,7 +1333,12 @@ void plume::EditorWindow::keyboard(const KeyboardEvent& event) {
     m_tooltip->dismiss();
   }
   const auto forward = [this, &event] {
-    m_dispatcher.keyEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
+    // The dispatcher keeps Tab for moving the focus; an area that captures every key gets it first.
+    if (InputArea* focused = m_dispatcher.focusedArea(); focused && focused->capturesAllKeys()) {
+      focused->dispatchKey(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
+    } else {
+      m_dispatcher.keyEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
+    }
     requestUpdate();
   };
   if (!event.pressed || event.preedit) {

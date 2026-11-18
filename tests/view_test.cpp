@@ -279,6 +279,11 @@ int main() {
     CHECK(f.text() == "alpha beta\ngammabeta");
     TextView::setPrimarySelection(nullptr);
   }
+  {
+    // The view takes Tab itself; a window must hand it over instead of moving the focus.
+    Fixture f("x");
+    CHECK(f.view.inputArea()->capturesAllKeys());
+  }
   TextView::setClipboard(nullptr);
   return 0;
 }

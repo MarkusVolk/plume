@@ -158,6 +158,8 @@ plume::TextView::TextView() {
 
   auto area = std::make_unique<InputArea>();
   area->setFocusable(true);
+  // Tab indents here instead of moving the focus on.
+  area->setCapturesAllKeys(true);
   area->setCursorShape(WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT);
   area->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT, BTN_RIGHT, BTN_MIDDLE}));
   area->setTextInputClient(this);
