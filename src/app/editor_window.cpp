@@ -330,8 +330,11 @@ void plume::EditorWindow::closeTab(std::size_t index) {
   }
   if (m_mounted == index) {
     tab.detached.reset(static_cast<TextView*>(m_root->removeChild(tab.view).release()));
+    m_mounted = static_cast<std::size_t>(-1);
+  } else if (m_mounted < m_tabs.size() && m_mounted > index) {
+    // The tab on show stays on show; it only moves one place up in the list.
+    --m_mounted;
   }
-  m_mounted = static_cast<std::size_t>(-1);
   // The view may be the one handling the event that closes it: it goes after this turn of the loop.
   DeferredCall::callLater([doomed = std::shared_ptr<Tab>(std::move(m_tabs[index]))] {});
   m_tabs.erase(m_tabs.begin() + static_cast<std::ptrdiff_t>(index));
@@ -678,6 +681,19 @@ bool plume::EditorWindow::action(const std::string& name, const std::string& par
   Tab* tab = active();
   if (name == "menu") {
     showMainMenu();
+    return true;
+  }
+  // A tab by its place in the strip, counted from 1.
+  if ((name == "select-tab" || name == "close-tab") && !parameter.empty()) {
+    const long number = std::atol(parameter.c_str());
+    if (number < 1 || static_cast<std::size_t>(number) > m_tabs.size()) {
+      return false;
+    }
+    if (name == "select-tab") {
+      select(static_cast<std::size_t>(number) - 1);
+    } else {
+      requestClose(static_cast<std::size_t>(number) - 1);
+    }
     return true;
   }
   if (name == "insert-text" && tab) {
