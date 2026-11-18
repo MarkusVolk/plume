@@ -76,6 +76,11 @@ namespace plume {
     // Replaces [offset, offset+length) as one undo step and leaves the caret after it.
     void replaceRange(std::size_t offset, std::size_t length, std::string_view text);
 
+    // Replaces every match with its text, last to first, as one undo step; both lists are parallel.
+    void replaceMatches(const std::vector<Match>& matches, const std::vector<std::string>& texts);
+    // The keyboard modifiers held now: Shift extends the selection on click.
+    void setModifiers(std::uint32_t modifiers) noexcept { m_modifiers = modifiers; }
+
     // Search hits to mark; `current` gets the stronger color.
     void setMatches(std::vector<Match> matches, std::optional<std::size_t> current);
 
@@ -131,6 +136,10 @@ namespace plume {
     enum class Granularity { Character, Word, Line };
 
     void doLayout(Renderer& renderer) override;
+    // The parent decides the size; measuring does not lay the text out.
+    LayoutSize doMeasure(Renderer&, const LayoutConstraints& constraints) override {
+      return constraints.constrain({.width = width(), .height = height()});
+    }
     void doRebindRenderer(Renderer& renderer) override { m_renderer = &renderer; }
 
     std::string lineSource(std::size_t line) const;
@@ -177,6 +186,7 @@ namespace plume {
     TextViewOptions m_options;
     Selection m_selection;
     float m_goalX = -1.0F;
+    std::uint32_t m_modifiers = 0;
     std::size_t m_topLine = 0;
     float m_topOffset = 0.0F;
     float m_scrollX = 0.0F;

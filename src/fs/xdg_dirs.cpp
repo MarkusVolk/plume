@@ -25,3 +25,4 @@ namespace {
 std::filesystem::path plume::configHome() { return baseDirectory("XDG_CONFIG_HOME", ".config"); }
 std::filesystem::path plume::stateHome() { return baseDirectory("XDG_STATE_HOME", ".local/state"); }
 std::filesystem::path plume::cacheHome() { return baseDirectory("XDG_CACHE_HOME", ".cache"); }
+std::filesystem::path plume::dataHome() { return baseDirectory("XDG_DATA_HOME", ".local/share"); }

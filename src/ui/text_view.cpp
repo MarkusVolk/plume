@@ -731,7 +731,7 @@ void plume::TextView::doLayout(Renderer& renderer) {
       const bool current = m_currentMatch && static_cast<std::size_t>(at - m_matches.begin()) == *m_currentMatch;
       mark(
           at->offset, at->offset + at->length, m_matchBoxes, usedMatches,
-          colorSpecFromRole(current ? ColorRole::Tertiary : ColorRole::Secondary, current ? 0.55F : 0.28F), 1, false
+          colorSpecFromRole(current ? ColorRole::Primary : ColorRole::Secondary, current ? 0.5F : 0.25F), 1, false
       );
     }
   }
@@ -1025,6 +1025,30 @@ void plume::TextView::indentLines(bool outdent) {
       shift(after.cursor, start, -static_cast<std::ptrdiff_t>(remove));
     }
   }
+  m_document->endGroup(after);
+  m_selection = after;
+  m_goalX = -1.0F;
+  changed();
+}
+
+void plume::TextView::replaceMatches(const std::vector<Match>& matches, const std::vector<std::string>& texts) {
+  if (!m_document || matches.empty() || matches.size() != texts.size()) {
+    return;
+  }
+  clearPreedit();
+  m_document->beginGroup(m_selection);
+  std::size_t cursor = m_selection.cursor;
+  for (std::size_t i = matches.size(); i > 0; --i) {
+    const Match& match = matches[i - 1];
+    m_document->replace(match.offset, match.length, texts[i - 1]);
+    // The caret keeps its place in the text around the replacements.
+    if (cursor >= match.offset + match.length) {
+      cursor = cursor - match.length + texts[i - 1].size();
+    } else if (cursor > match.offset) {
+      cursor = match.offset + texts[i - 1].size();
+    }
+  }
+  const Selection after = Selection::at(std::min(cursor, m_document->buffer().size()));
   m_document->endGroup(after);
   m_selection = after;
   m_goalX = -1.0F;
@@ -1351,7 +1375,7 @@ void plume::TextView::pointerPress(const InputArea::PointerData& data) {
     m_selection = m_dragOrigin;
   } else {
     m_dragGranularity = Granularity::Character;
-    const bool extend = false;
+    const bool extend = (m_modifiers & KeyMod::Shift) != 0;
     m_selection.cursor = offset;
     if (!extend) {
       m_selection.anchor = offset;

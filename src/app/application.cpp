@@ -1,19 +1,24 @@
 #include "app/application.h"
 
 #include "app/editor_window.h"
+#include "app/instance_service.h"
 #include "app/main_loop.h"
 #include "app/palette_watcher.h"
+#include "app/settings.h"
 #include "core/application_identity.h"
 #include "core/files/resource_paths.h"
+#include "core/input/key_modifiers.h"
 #include "core/input/key_symbols.h"
 #include "core/input/keybind_matcher.h"
 #include "core/log.h"
 #include "core/ui_strings.h"
 #include "event_loop/deferred_call_poll_source.h"
 #include "event_loop/glib_poll_source.h"
+#include "document/session.h"
 #include "event_loop/timer_poll_source.h"
 #include "platform/clipboard.h"
 #include "platform/desktop_integration.h"
+#include "platform/file_portal.h"
 #include "plume_build_info.h"
 #include "render/animation/animation_manager.h"
 #include "render/gl_shared_context.h"
@@ -88,6 +93,19 @@ namespace {
 
 int plume::runApplication(const std::vector<std::string>& files) {
   initLogLevelFromEnvironment();
+  // Relative names are those of the launching shell, also when another instance opens them.
+  std::vector<std::filesystem::path> paths;
+  for (const auto& file : files) {
+    std::error_code error;
+    paths.push_back(std::filesystem::absolute(file, error).lexically_normal());
+  }
+  InstanceService instance;
+  if (instance.role() == InstanceService::Role::Secondary) {
+    const char* token = std::getenv("XDG_ACTIVATION_TOKEN");
+    if (instance.forward(paths, token ? token : "")) {
+      return EXIT_SUCCESS;
+    }
+  }
   initializeKeys();
   Input::setValidateKeyMatcher([](std::uint32_t sym, std::uint32_t modifiers) {
     return modifiers == 0 && KeySymbol::isEnter(sym);
@@ -98,6 +116,10 @@ int plume::runApplication(const std::vector<std::string>& files) {
   int result = EXIT_SUCCESS;
   try {
     initializeLibrary();
+    SettingsStore settings;
+    for (const auto& issue : settings.issues()) {
+      std::println(stderr, "plume: {}", issue);
+    }
     GlibPollSource glib;
     TextInputService textInput;
     WaylandConnection connection;
@@ -123,33 +145,43 @@ int plume::runApplication(const std::vector<std::string>& files) {
     renderer.initialize(graphics);
     PaletteWatcher palette;
     AnimationManager animations;
+    FilePortal portal;
 
-    EditorWindow window({.connection = connection, .renderer = renderer, .textInput = textInput, .animations = animations});
-    for (const auto& file : files) {
-      window.openFile(file);
+    EditorWindow window(
+        {.connection = connection,
+         .renderer = renderer,
+         .textInput = textInput,
+         .animations = animations,
+         .portal = portal,
+         .settings = settings},
+        loadSession()
+    );
+    for (const auto& path : paths) {
+      window.openFile(path);
     }
-    if (files.empty()) {
+    if (!window.hasTabs()) {
       window.newTab();
     }
+    window.setOnQuit([] { g_stopRequested = 1; });
+    instance.setHandler([&window, &desktop](const InstanceRequest& request) {
+      for (const auto& file : request.files) {
+        window.openFile(file);
+      }
+      if (!request.action.empty() && !window.action(request.action, request.parameter)) {
+        std::println(stderr, "plume: no action named {}", request.action);
+      }
+      if (!request.activationToken.empty()) {
+        desktop.activate(request.activationToken, window.surface());
+      }
+    });
 
     connection.setPointerEventCallback([&window, &desktop](const PointerEvent& event) {
       desktop.pointer(event);
-      if (window.owns(event.surface)) {
-        window.pointer(event);
-      }
+      window.pointer(event);
     });
-    connection.setKeyboardEventCallback([&window](const KeyboardEvent& event) {
-      if (event.pressed && !event.preedit && event.modifiers == KeyMod::Ctrl && event.sym == XKB_KEY_q) {
-        g_stopRequested = 1;
-        return;
-      }
-      window.keyboard(event);
-    });
-    connection.setKeyboardFocusCallback([&window](wl_surface* surface, bool entered) {
-      if (window.owns(surface)) {
-        window.focus(entered);
-      }
-    });
+    connection.setKeyboardEventCallback([&window](const KeyboardEvent& event) { window.keyboard(event); });
+    connection.setKeyboardModifiersCallback([&window](std::uint32_t modifiers) { window.modifiers(modifiers); });
+    connection.setKeyboardFocusCallback([&window](wl_surface* surface, bool entered) { window.focus(surface, entered); });
 
     DeferredCallPollSource deferred;
     TimerPollSource timers;
@@ -161,8 +193,14 @@ int plume::runApplication(const std::vector<std::string>& files) {
       return window.running();
     });
     loop.run();
+    instance.release();
+    // Whatever is unsaved goes to the drafts, so the next start shows it again.
+    if (window.hasTabs()) {
+      window.saveSession(true);
+    }
     connection.setPointerEventCallback({});
     connection.setKeyboardEventCallback({});
+    connection.setKeyboardModifiersCallback({});
     connection.setKeyboardFocusCallback({});
     textInput.cleanup();
     connection.setTextInputService(nullptr);

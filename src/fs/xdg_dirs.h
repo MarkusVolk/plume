@@ -9,4 +9,5 @@ namespace plume {
   std::filesystem::path configHome();
   std::filesystem::path stateHome();
   std::filesystem::path cacheHome();
+  std::filesystem::path dataHome();
 } // namespace plume
