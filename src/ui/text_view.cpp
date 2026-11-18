@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <linux/input-event-codes.h>
+#include <utility>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 namespace {
@@ -515,33 +516,44 @@ void plume::TextView::revealCursor() {
   markLayoutDirty();
 }
 
+void plume::TextView::centerCursor() {
+  m_revealCursor = true;
+  m_revealCentered = true;
+  markLayoutDirty();
+}
+
 void plume::TextView::ensureCursorVisible() {
   const Caret caret = caretAt(m_selection.cursor);
   const float rowTop = static_cast<float>(caret.row) * m_rowHeight;
-  bool below = false;
+  const bool centered = std::exchange(m_revealCentered, false);
+  // Where the caret's row goes when it is outside the view: `room` pixels of text stay above it.
+  std::optional<float> room;
   if (caret.line < m_topLine || (caret.line == m_topLine && rowTop < m_topOffset)) {
-    m_topLine = caret.line;
-    m_topOffset = rowTop;
+    room = 0.0F;
   } else if (static_cast<float>(caret.line - m_topLine) > m_viewHeight / m_rowHeight + 1.0F) {
-    below = true;
+    room = std::max(0.0F, m_viewHeight - m_rowHeight);
   } else {
     float bottom = rowTop + m_rowHeight - m_topOffset;
     for (std::size_t line = m_topLine; line < caret.line; ++line) {
       bottom += lineHeight(line);
     }
-    below = bottom > m_viewHeight;
+    if (bottom > m_viewHeight) {
+      room = std::max(0.0F, m_viewHeight - m_rowHeight);
+    }
   }
-  if (below) {
-    // Put the caret's row at the bottom edge: walk up until the view is filled.
-    const float room = std::max(0.0F, m_viewHeight - m_rowHeight);
+  if (room) {
+    if (centered) {
+      room = std::floor(std::max(0.0F, m_viewHeight - m_rowHeight) * 0.5F / m_rowHeight) * m_rowHeight;
+    }
+    // Walk up from the caret's row until that much text is above it.
     float above = rowTop;
     std::size_t line = caret.line;
-    while (above < room && line > 0) {
+    while (above < *room && line > 0) {
       --line;
       above += lineHeight(line);
     }
     m_topLine = line;
-    m_topOffset = std::max(0.0F, above - room);
+    m_topOffset = std::max(0.0F, above - *room);
   }
   if (!m_options.wrap) {
     const float margin = std::min(m_textWidth * 0.25F, m_rowHeight * 2.0F);
@@ -839,7 +851,7 @@ void plume::TextView::restartBlink() {
 void plume::TextView::edit(
     std::size_t offset, std::size_t length, std::string_view text, std::size_t cursorAfter, EditKind kind
 ) {
-  if (!m_document) {
+  if (m_readOnly || !m_document) {
     return;
   }
   clearPreedit();
@@ -886,7 +898,7 @@ void plume::TextView::newLine() {
 }
 
 void plume::TextView::undo() {
-  if (!m_document) {
+  if (m_readOnly || !m_document) {
     return;
   }
   clearPreedit();
@@ -898,7 +910,7 @@ void plume::TextView::undo() {
 }
 
 void plume::TextView::redo() {
-  if (!m_document) {
+  if (m_readOnly || !m_document) {
     return;
   }
   clearPreedit();
@@ -916,6 +928,10 @@ void plume::TextView::copy() {
 }
 
 void plume::TextView::cut() {
+  if (m_readOnly) {
+    copy();
+    return;
+  }
   if (g_clipboard && m_document && !m_selection.empty()) {
     g_clipboard->setClipboardText(selectedText());
     deleteSelectionOr(0, 0, EditKind::Discrete);
@@ -923,7 +939,7 @@ void plume::TextView::cut() {
 }
 
 void plume::TextView::paste() {
-  if (!g_clipboard || !m_document) {
+  if (m_readOnly || !g_clipboard || !m_document) {
     return;
   }
   g_clipboard->requestClipboardText([this, alive = std::weak_ptr<int>(m_alive)](std::optional<std::string> text) {
@@ -956,7 +972,7 @@ void plume::TextView::selectAll() {
 }
 
 void plume::TextView::sortLines(SortOptions options) {
-  if (!m_document) {
+  if (m_readOnly || !m_document) {
     return;
   }
   const Buffer& buffer = m_document->buffer();
@@ -986,7 +1002,7 @@ void plume::TextView::sortLines(SortOptions options) {
 }
 
 void plume::TextView::indentLines(bool outdent) {
-  if (!m_document) {
+  if (m_readOnly || !m_document) {
     return;
   }
   const Buffer& buffer = m_document->buffer();
@@ -1032,7 +1048,7 @@ void plume::TextView::indentLines(bool outdent) {
 }
 
 void plume::TextView::replaceMatches(const std::vector<Match>& matches, const std::vector<std::string>& texts) {
-  if (!m_document || matches.empty() || matches.size() != texts.size()) {
+  if (m_readOnly || !m_document || matches.empty() || matches.size() != texts.size()) {
     return;
   }
   clearPreedit();
@@ -1187,6 +1203,9 @@ void plume::TextView::handleKey(const InputArea::KeyData& key) {
 
   // A dead key shows what it would compose until the next key settles it.
   if (key.preedit) {
+    if (m_readOnly) {
+      return;
+    }
     if (!m_selection.empty()) {
       deleteSelectionOr(0, 0, EditKind::Discrete);
     }
@@ -1476,7 +1495,7 @@ TextInputState plume::TextView::textInputState() const {
 }
 
 void plume::TextView::textInputApplyEdit(const TextInputEdit& edit) {
-  if (!m_document) {
+  if (m_readOnly || !m_document) {
     return;
   }
   const Buffer& buffer = m_document->buffer();

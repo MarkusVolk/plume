@@ -81,6 +81,8 @@ namespace plume {
       std::unique_ptr<Document> document;
       std::filesystem::path path;
       FileFormat format;
+      // Binary data shown for reading: never edited or saved.
+      bool readOnly = false;
       // Owned here while the tab is not shown, by the scene while it is.
       std::unique_ptr<TextView> detached;
       TextView* view = nullptr;
@@ -173,6 +175,7 @@ namespace plume {
     bool m_searchStale = true;
 
     Timer m_autosave;
+    Timer m_statusTimer;
     Session m_savedSession;
     std::function<void()> m_onQuit;
     std::shared_ptr<int> m_alive = std::make_shared<int>(0);

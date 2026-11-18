@@ -79,6 +79,18 @@ text_lib = static_library('plume-text',
 )
 text_dep = declare_dependency(link_with: text_lib, include_directories: src_inc, dependencies: [glib, pango])
 
+# Reading and writing files, drafts and the session.
+files_lib = static_library('plume-files',
+  files(
+    'src/document/file_io.cpp',
+    'src/document/session.cpp',
+    'src/fs/xdg_dirs.cpp',
+  ),
+  include_directories: src_inc,
+  dependencies: [text_dep, gio, tomlplusplus],
+)
+files_dep = declare_dependency(link_with: files_lib, include_directories: src_inc, dependencies: [text_dep, gio, tomlplusplus])
+
 # The editing surface, without the application around it: the view tests drive it headless.
 view_lib = static_library('plume-view',
   files('src/ui/text_view.cpp'),
@@ -93,3 +105,9 @@ tests_opt = get_option('tests')
 if tests_opt.enabled() or (tests_opt.auto() and get_option('buildtype') == 'debug')
   subdir('tests')
 endif
+
+install_subdir(noctalia_ui_assets_dir / 'fonts', install_dir: get_option('datadir') / 'plume/assets')
+install_data('assets/templates/colors.toml', install_dir: get_option('datadir') / 'plume/templates')
+install_data('assets/desktop/de.flk.Plume.desktop', install_dir: get_option('datadir') / 'applications')
+install_data('assets/icons/de.flk.Plume.svg', install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
+install_data('LICENSE', install_dir: get_option('datadir') / 'licenses/plume')

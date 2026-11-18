@@ -27,6 +27,7 @@ namespace {
   constexpr float kStatusHeight = 28.0F;
   constexpr float kSearchWidth = 440.0F;
   constexpr auto kAutosaveInterval = std::chrono::seconds(3);
+  constexpr auto kStatusTime = std::chrono::seconds(6);
   // Drafts of texts larger than this are written less often.
   constexpr std::size_t kLargeDraft = 4U * 1024U * 1024U;
 
@@ -141,6 +142,10 @@ void plume::EditorWindow::requestUpdate() { m_surface.requestLayout(); }
 
 void plume::EditorWindow::status(std::string message) {
   m_status = std::move(message);
+  m_statusTimer.start(kStatusTime, [this] {
+    m_status.clear();
+    requestUpdate();
+  });
   requestUpdate();
 }
 
@@ -193,6 +198,8 @@ bool plume::EditorWindow::load(Tab& tab) {
     return false;
   }
   tab.format = loaded->format;
+  tab.readOnly = loaded->binary;
+  tab.view->setReadOnly(tab.readOnly);
   tab.document->setText(std::move(loaded->text));
   tab.view->documentReplaced();
   tab.stamp = stampOf(tab.path);
@@ -330,6 +337,10 @@ void plume::EditorWindow::save(std::uint64_t id, std::function<void()> then) {
     return;
   }
   Tab& tab = *m_tabs[index];
+  if (tab.readOnly) {
+    status(std::format("{} is binary data and shown read-only", tab.path.filename().string()));
+    return;
+  }
   if (tab.path.empty()) {
     saveAs(id, std::move(then));
     return;
@@ -349,6 +360,10 @@ void plume::EditorWindow::saveAs(std::uint64_t id, std::function<void()> then) {
     return;
   }
   const Tab& tab = *m_tabs[index];
+  if (tab.readOnly) {
+    status(std::format("{} is binary data and shown read-only", tab.path.filename().string()));
+    return;
+  }
   const auto folder = tab.path.empty() ? homeFolder() : tab.path.parent_path();
   const std::string name = tab.path.empty() ? std::string("Untitled.txt") : tab.path.filename().string();
   m_services.portal.saveFile(
@@ -634,6 +649,7 @@ bool plume::EditorWindow::action(const std::string& name, const std::string& par
     const auto line = static_cast<std::size_t>(std::max(1L, std::atol(parameter.c_str()))) - 1;
     const Buffer& buffer = tab->document->buffer();
     tab->view->setSelection(Selection::at(buffer.lineStart(std::min(line, buffer.lineCount() - 1))));
+    tab->view->centerCursor();
     return true;
   }
   for (const auto& [candidate, command] : kActions) {
@@ -880,6 +896,7 @@ void plume::EditorWindow::stepSearch(bool forward) {
   }
   const Match& match = m_matches[index];
   tab->view->setSelection({.anchor = match.offset, .cursor = match.offset + match.length});
+  tab->view->centerCursor();
   requestUpdate();
 }
 
@@ -1178,11 +1195,13 @@ void plume::EditorWindow::prepare() {
             )
   );
   m_formatText->setText(
-      std::format(
-          "{}{}   {}   {} {}", tab.format.encoding, tab.format.byteOrderMark ? " BOM" : "",
-          tab.format.lineEnding == LineEnding::CrLf ? "CRLF" : "LF", m_settings.editor.insertSpaces ? "Spaces" : "Tab",
-          m_settings.editor.tabWidth
-      )
+      tab.readOnly
+          ? std::string("Binary, read-only")
+          : std::format(
+                "{}{}   {}   {} {}", tab.format.encoding, tab.format.byteOrderMark ? " BOM" : "",
+                tab.format.lineEnding == LineEnding::CrLf ? "CRLF" : "LF",
+                m_settings.editor.insertSpaces ? "Spaces" : "Tab", m_settings.editor.tabWidth
+            )
   );
 
   auto& renderer = m_surface.renderTarget().renderer();
@@ -1268,7 +1287,6 @@ void plume::EditorWindow::keyboard(const KeyboardEvent& event) {
     }
     return;
   }
-  m_status.clear();
   const bool ctrl = event.modifiers == KeyMod::Ctrl;
   const bool ctrlShift = event.modifiers == (KeyMod::Ctrl | KeyMod::Shift);
   const bool plain = event.modifiers == 0;

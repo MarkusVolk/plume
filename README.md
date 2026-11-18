@@ -23,12 +23,62 @@ xkbcommon, tomlplusplus, nlohmann_json and the stb headers.
 | Key | Action |
 | --- | --- |
 | Ctrl+T, Ctrl+N | New tab |
+| Ctrl+O | Open (the desktop's file dialog) |
+| Ctrl+S, Ctrl+Shift+S | Save, Save As |
 | Ctrl+W | Close tab |
-| Ctrl+S | Save |
+| Ctrl+Tab, Ctrl+Shift+Tab, Alt+1…9 | Switch tabs |
+| Ctrl+F, Ctrl+H | Find, Find and Replace |
+| Enter, Shift+Enter, F3, Shift+F3, Ctrl+G | Next and previous match |
 | Ctrl+Plus, Ctrl+Minus, Ctrl+0 | Zoom |
 | F7 | Line numbers |
 | F8 | Wrap lines |
-| F9 | Sort lines (the selected ones, or all) |
+| F9, Shift+F9 | Sort lines ascending, descending (the selected ones, or all) |
+| F10 | Menu |
+| Ctrl+Q | Quit; unsaved texts come back on the next start |
+
+Replacement text of a regular-expression search may refer to groups with `\1` or `\g<name>`.
+
+## Files
+
+Text is read as UTF-8, UTF-16 with a byte order mark, or else Windows-1252, and saved the way it
+was found, including CR LF line ends. Binary files open read-only: their text runs stay readable
+and searchable, other bytes show as dots.
+
+Unsaved texts are kept in `~/.local/share/plume/drafts` and the open tabs in
+`~/.local/state/plume/session.toml`, so quitting never asks and never loses anything. Closing a
+single tab with unsaved changes does ask.
+
+## Settings
+
+Defaults go into `~/.config/plume/config.toml`; what the menu changes is written to
+`settings.toml` next to it.
+
+```toml
+[editor]
+font_family = "monospace"
+font_size = 13
+tab_width = 8
+insert_spaces = false
+line_numbers = true
+wrap = true
+highlight_current_line = true
+auto_indent = true
+```
+
+## Actions over D-Bus
+
+A second `plume file` opens the file in the running window. The window also takes the actions of
+its menu through `org.freedesktop.Application.ActivateAction` on `de.flk.Plume`, for example:
+
+```sh
+busctl --user call de.flk.Plume /de/flk/Plume org.freedesktop.Application \
+  ActivateAction 'sava{sv}' find 1 s 'TODO' 0
+```
+
+Actions: `new-tab`, `open`, `save`, `save-as`, `close-tab`, `quit`, `undo`, `redo`, `cut`, `copy`,
+`paste`, `select-all`, `find`, `replace`, `sort-lines`, `sort-lines-descending`,
+`sort-lines-unique`, `line-numbers`, `wrap`, `highlight-line`, `zoom-in`, `zoom-out`, `zoom-reset`,
+`menu`, `insert-text <text>`, `go-to-line <number>`.
 
 ## Colours
 

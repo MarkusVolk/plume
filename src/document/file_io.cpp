@@ -7,6 +7,106 @@
 #include <utility>
 
 namespace {
+  constexpr const char* kLegacyEncoding = "WINDOWS-1252";
+  // Windows-1252 differs from Latin-1 in 0x80..0x9F; the five bytes it leaves undefined keep
+  // their Latin-1 control codes, so every byte decodes and encodes back to itself.
+  constexpr char16_t kLegacyHigh[32] = {
+      0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160,
+      0x2039, 0x0152, 0x008D, 0x017D, 0x008F, 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022,
+      0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+  };
+
+  // Done here instead of through iconv, whose module for it is often not installed.
+  std::string decodeLegacy(std::string_view bytes) {
+    std::string out;
+    out.reserve(bytes.size() + bytes.size() / 8);
+    for (const char byte : bytes) {
+      const auto value = static_cast<unsigned char>(byte);
+      const char32_t codepoint = value >= 0x80 && value < 0xA0 ? kLegacyHigh[value - 0x80] : value;
+      if (codepoint < 0x80) {
+        out.push_back(static_cast<char>(codepoint));
+      } else if (codepoint < 0x800) {
+        out.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+      } else {
+        out.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+      }
+    }
+    return out;
+  }
+
+  std::expected<std::string, std::string> encodeLegacy(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char* at = text.data(); at < text.data() + text.size(); at = g_utf8_next_char(at)) {
+      const gunichar codepoint = g_utf8_get_char(at);
+      if (codepoint < 0x80 || (codepoint >= 0xA0 && codepoint <= 0xFF)) {
+        out.push_back(static_cast<char>(codepoint));
+        continue;
+      }
+      bool found = false;
+      for (unsigned i = 0; i < 32; ++i) {
+        if (kLegacyHigh[i] == codepoint) {
+          out.push_back(static_cast<char>(0x80 + i));
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        gchar character[8] = {};
+        g_unichar_to_utf8(codepoint, character);
+        return std::unexpected(std::string("it has no “") + character + "”");
+      }
+    }
+    return out;
+  }
+
+  // Binary data as text to look at: printable ASCII and line ends as they are, bytes above 0x7F
+  // as their Windows-1252 characters, every other byte as a middle dot. A stretch without a line
+  // end is broken after kBinaryLine bytes, where possible at a byte that is not text, so that
+  // strings such as paths stay in one piece for searching.
+  constexpr std::size_t kBinaryLine = 2048;
+  std::string renderBinary(std::string_view bytes) {
+    std::string out;
+    out.reserve(bytes.size() + bytes.size() / 2);
+    std::size_t lineStart = 0;
+    std::size_t lineBytes = 0;
+    // Where the current line could be broken without cutting through text: offset in `out`.
+    std::size_t lastGap = std::string::npos;
+    for (const char byte : bytes) {
+      const auto value = static_cast<unsigned char>(byte);
+      if (value == '\n') {
+        out.push_back('\n');
+        lineStart = out.size();
+        lineBytes = 0;
+        lastGap = std::string::npos;
+        continue;
+      }
+      if (value == '\t' || (value >= 0x20 && value < 0x7F)) {
+        out.push_back(byte);
+      } else if (value >= 0xA0) {
+        out.push_back(static_cast<char>(0xC0 | (value >> 6)));
+        out.push_back(static_cast<char>(0x80 | (value & 0x3F)));
+      } else {
+        out.append("\xC2\xB7");
+        lastGap = out.size();
+      }
+      if (++lineBytes >= kBinaryLine) {
+        const std::size_t at = lastGap != std::string::npos && lastGap > lineStart ? lastGap : out.size();
+        out.insert(at, 1, '\n');
+        lineStart = at + 1;
+        lineBytes = 0;
+        for (std::size_t i = lineStart; i < out.size(); ++i) {
+          lineBytes += (static_cast<unsigned char>(out[i]) & 0xC0) != 0x80 ? 1 : 0;
+        }
+        lastGap = std::string::npos;
+      }
+    }
+    return out;
+  }
+
   std::expected<std::string, std::string> convert(std::string_view bytes, const char* to, const char* from) {
     GError* error = nullptr;
     gsize written = 0;
@@ -39,14 +139,12 @@ std::expected<plume::LoadedFile, std::string> plume::decodeFile(std::string byte
   }
   if (!g_utf8_validate_len(bytes.data(), static_cast<gssize>(bytes.size()), nullptr)) {
     if (bytes.find('\0') != std::string::npos) {
-      return std::unexpected("this is not a text file");
+      file.binary = true;
+      file.text = renderBinary(bytes);
+      return file;
     }
-    auto text = convert(bytes, "UTF-8", "ISO-8859-15");
-    if (!text) {
-      return std::unexpected(text.error());
-    }
-    file.format.encoding = "ISO-8859-15";
-    bytes = std::move(*text);
+    file.format.encoding = kLegacyEncoding;
+    bytes = decodeLegacy(bytes);
   }
 
   // Only a file that uses CR LF throughout is converted; stray carriage returns stay visible.
@@ -87,7 +185,7 @@ std::expected<std::string, std::string> plume::encodeFile(std::string_view text,
     out.assign(text);
   }
   if (format.encoding != "UTF-8") {
-    auto converted = convert(out, format.encoding.c_str(), "UTF-8");
+    auto converted = format.encoding == kLegacyEncoding ? encodeLegacy(out) : convert(out, format.encoding.c_str(), "UTF-8");
     if (!converted) {
       return std::unexpected("the text cannot be stored as " + format.encoding + ": " + converted.error());
     }

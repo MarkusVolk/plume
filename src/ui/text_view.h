@@ -51,6 +51,10 @@ namespace plume {
     void setOptions(const TextViewOptions& options);
     const TextViewOptions& options() const noexcept { return m_options; }
 
+    // A read-only view moves, selects and copies but changes nothing.
+    void setReadOnly(bool readOnly) noexcept { m_readOnly = readOnly; }
+    bool readOnly() const noexcept { return m_readOnly; }
+
     Selection selection() const noexcept { return m_selection; }
     void setSelection(Selection selection, bool reveal = true);
     std::string selectedText() const;
@@ -62,6 +66,8 @@ namespace plume {
     std::size_t topLine() const noexcept { return m_topLine; }
     void scrollToLine(std::size_t line);
     void revealCursor();
+    // Like revealCursor(), but a caret outside the view lands in its middle instead of at an edge.
+    void centerCursor();
 
     void insertText(std::string_view text);
     void undo();
@@ -191,6 +197,8 @@ namespace plume {
     float m_topOffset = 0.0F;
     float m_scrollX = 0.0F;
     bool m_revealCursor = false;
+    bool m_readOnly = false;
+    bool m_revealCentered = false;
 
     // Layouts by line text, valid for the metrics below.
     std::unordered_map<std::string, std::shared_ptr<const LineLayout>> m_layouts;

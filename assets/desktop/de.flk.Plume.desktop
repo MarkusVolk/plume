@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Plume
+GenericName=Text Editor
+Comment=Edit text files
+Exec=plume %F
+Icon=de.flk.Plume
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;application/x-zerosize;
+Keywords=text;editor;notes;write;
+StartupWMClass=de.flk.Plume
