@@ -4,12 +4,14 @@
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
+#include "syntax/token_style.h"
 #include "text/document.h"
 #include "text/operations.h"
 #include "ui/palette.h"
 #include "ui/signal.h"
 #include "ui/text_input_client.h"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -87,6 +89,9 @@ namespace plume {
     // The keyboard modifiers held now: Shift extends the selection on click.
     void setModifiers(std::uint32_t modifiers) noexcept { m_modifiers = modifiers; }
 
+    // Where the colors of the text come from; null for plain text. Not owned.
+    void setSyntax(SyntaxSource* syntax);
+
     // Search hits to mark; `current` gets the stronger color.
     void setMatches(std::vector<Match> matches, std::optional<std::size_t> current);
 
@@ -98,6 +103,10 @@ namespace plume {
 
     InputArea* inputArea() const noexcept { return m_area; }
     static void setClipboard(TextClipboard* clipboard) noexcept;
+    // Colors of the syntax styles that the theme sets itself; the others are mixed from the palette.
+    using SyntaxColors = std::array<std::optional<Color>, static_cast<std::size_t>(TokenStyle::Count)>;
+    static void setSyntaxColors(const SyntaxColors& colors);
+    static const SyntaxColors& syntaxColors() noexcept;
 
     // The document changed behind the view's back (reload, undo by the owner): drop layouts, clamp the selection.
     void documentReplaced();
@@ -214,6 +223,13 @@ namespace plume {
     float m_viewHeight = 0.0F;
     float m_maxRowWidth = 0.0F;
     std::vector<VisibleLine> m_visible;
+
+    SyntaxSource* m_syntax = nullptr;
+    // Styles of the bytes [m_stylesBegin, m_stylesEnd), as of m_stylesRevision.
+    std::vector<TokenStyle> m_styles;
+    std::size_t m_stylesBegin = 0;
+    std::size_t m_stylesEnd = 0;
+    std::uint64_t m_stylesRevision = 0;
 
     std::vector<Match> m_matches;
     std::optional<std::size_t> m_currentMatch;

@@ -3,6 +3,7 @@
 #include "core/log.h"
 #include "fs/directory_watch.h"
 #include "ui/palette_file.h"
+#include "ui/text_view.h"
 
 #include <glib.h>
 
@@ -28,7 +29,15 @@ void plume::PaletteWatcher::reload() {
     kLog.warn("{}", palette.error());
     return;
   }
+  const auto syntax = loadSyntaxColors(m_path);
+  const bool syntaxChanged = syntax != TextView::syntaxColors();
+  TextView::setSyntaxColors(syntax);
+  const Palette before = ::palette;
   setPalette(*palette);
+  // The views redraw on a palette change; new syntax colors alone must reach them too.
+  if (syntaxChanged && before == *palette) {
+    paletteChanged().emit();
+  }
 }
 
 void plume::PaletteWatcher::scheduleReload() {

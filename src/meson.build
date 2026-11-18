@@ -22,7 +22,7 @@ executable('plume',
   app_sources + protocol_sources + protocol_headers + [build_info],
   include_directories: src_inc,
   dependencies: [
-    view_dep, files_dep, gio, gio_unix, tomlplusplus,
+    view_dep, files_dep, syntax_dep, gio, gio_unix, tomlplusplus,
     dependency('wayland-client'), dependency('wayland-cursor'), dependency('threads'),
   ],
   install: true,

@@ -6,6 +6,7 @@
 #include "document/session.h"
 #include "platform/desktop_integration.h"
 #include "render/scene/input_dispatcher.h"
+#include "syntax/highlighter.h"
 #include "text/document.h"
 #include "text/operations.h"
 #include "ui/controls/context_menu_popup.h"
@@ -84,6 +85,9 @@ namespace plume {
       FileFormat format;
       // Binary data shown for reading: never edited or saved.
       bool readOnly = false;
+      // The syntax tree that colors the text, and the language it is for; none for plain text.
+      std::string language;
+      std::unique_ptr<Highlighter> syntax;
       // Owned here while the tab is not shown, by the scene while it is.
       std::unique_ptr<TextView> detached;
       TextView* view = nullptr;
@@ -107,6 +111,8 @@ namespace plume {
     Tab* active() { return m_active < m_tabs.size() ? m_tabs[m_active].get() : nullptr; }
     std::size_t indexOf(std::uint64_t id) const;
     bool load(Tab& tab);
+    // Gives the tab the syntax tree that fits its file name, or takes it away.
+    void attachSyntax(Tab& tab);
     void save(std::uint64_t id, std::function<void()> then = {});
     void saveAs(std::uint64_t id, std::function<void()> then = {});
     bool write(Tab& tab);

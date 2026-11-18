@@ -12,6 +12,7 @@
 #include "wayland/text_input_service.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <linux/input-event-codes.h>
 #include <utility>
@@ -19,6 +20,7 @@
 
 namespace {
   TextClipboard* g_clipboard = nullptr;
+  plume::TextView::SyntaxColors g_syntaxColors;
 
   // Longest run of text handed to the text renderer as one node.
   constexpr std::size_t kPieceBytes = 512;
@@ -32,6 +34,47 @@ namespace {
   constexpr std::uint32_t kMultiClickMs = 400;
   // Lines of the buffer handed to the input method around the caret.
   constexpr std::size_t kSurroundingBytes = 2000;
+  // A view that shows more text than this at once (one huge line) is drawn without colors.
+  constexpr std::size_t kMaxStyledBytes = 512U * 1024U;
+
+  // The colors of the syntax styles, mixed from the palette so they follow the desktop theme.
+  std::array<Color, static_cast<std::size_t>(plume::TokenStyle::Count)> styleColors() {
+    using plume::TokenStyle;
+    const Color text = colorForRole(ColorRole::OnSurface);
+    const Color muted = colorForRole(ColorRole::OnSurfaceVariant);
+    const Color surface = colorForRole(ColorRole::Surface);
+    const Color primary = colorForRole(ColorRole::Primary);
+    const Color secondary = colorForRole(ColorRole::Secondary);
+    const Color tertiary = colorForRole(ColorRole::Tertiary);
+    const Color error = colorForRole(ColorRole::Error);
+    std::array<Color, static_cast<std::size_t>(TokenStyle::Count)> colors;
+    colors.fill(text);
+    const auto set = [&colors](TokenStyle style, const Color& color) { colors[static_cast<std::size_t>(style)] = color; };
+    set(TokenStyle::Comment, lerpColor(muted, surface, 0.3F));
+    set(TokenStyle::Keyword, primary);
+    set(TokenStyle::String, tertiary);
+    set(TokenStyle::Escape, lerpColor(tertiary, text, 0.45F));
+    set(TokenStyle::Number, lerpColor(secondary, error, 0.4F));
+    set(TokenStyle::Constant, lerpColor(secondary, error, 0.4F));
+    set(TokenStyle::Function, secondary);
+    set(TokenStyle::Type, lerpColor(primary, tertiary, 0.5F));
+    set(TokenStyle::Property, lerpColor(text, secondary, 0.45F));
+    set(TokenStyle::Operator, lerpColor(text, muted, 0.5F));
+    set(TokenStyle::Punctuation, muted);
+    set(TokenStyle::Builtin, lerpColor(primary, error, 0.45F));
+    set(TokenStyle::Heading, primary);
+    set(TokenStyle::Link, secondary);
+    set(TokenStyle::Emphasis, tertiary);
+    set(TokenStyle::Added, tertiary);
+    set(TokenStyle::Removed, error);
+    set(TokenStyle::Changed, secondary);
+    for (std::size_t i = 0; i < colors.size(); ++i) {
+      if (g_syntaxColors[i]) {
+        colors[i] = *g_syntaxColors[i];
+      }
+    }
+    return colors;
+  }
 
   std::size_t digits(std::size_t value) {
     std::size_t count = 1;
@@ -76,6 +119,10 @@ std::size_t plume::TextView::LineLayout::stopOf(std::size_t column) const {
 }
 
 void plume::TextView::setClipboard(TextClipboard* clipboard) noexcept { g_clipboard = clipboard; }
+
+void plume::TextView::setSyntaxColors(const SyntaxColors& colors) { g_syntaxColors = colors; }
+
+const plume::TextView::SyntaxColors& plume::TextView::syntaxColors() noexcept { return g_syntaxColors; }
 
 plume::TextView::TextView() {
   setClipChildren(true);
@@ -662,9 +709,34 @@ void plume::TextView::doLayout(Renderer& renderer) {
   std::size_t usedText = 0, usedNumbers = 0, usedSelection = 0, usedMatches = 0;
   m_maxRowWidth = 0.0F;
 
-  // A marked range of the buffer as boxes, one per row it touches.
+  // The styles of everything in view, asked for again only when the text or the view moved.
+  bool styled = false;
+  if (m_syntax && !m_visible.empty()) {
+    const std::size_t first = buffer.lineStart(m_visible.front().line);
+    const std::size_t last = buffer.lineEnd(m_visible.back().line);
+    if (last - first <= kMaxStyledBytes) {
+      if (m_stylesRevision != m_syntax->revision() || first != m_stylesBegin || last != m_stylesEnd) {
+        m_syntax->styles(first, last, m_styles);
+        m_stylesBegin = first;
+        m_stylesEnd = last;
+        m_stylesRevision = m_syntax->revision();
+      }
+      styled = m_styles.size() == last - first;
+    }
+  }
+  const auto colors = styleColors();
+
+  // A marked range of the buffer as boxes, one per row it touches. The rows form one shape:
+  // only its outer corners are round, not the ones where two rows meet.
+  struct MarkedRow {
+    float left = 0.0F;
+    float right = 0.0F;
+    float top = 0.0F;
+  };
+  std::vector<MarkedRow> marked;
   const auto mark = [&](std::size_t begin, std::size_t end, std::vector<Box*>& pool, std::size_t& used,
                         const ColorSpec& fill, int z, bool toLineEnd) {
+    marked.clear();
     for (const VisibleLine& visible : m_visible) {
       const std::size_t lineStart = buffer.lineStart(visible.line);
       const std::size_t lineEnd = lineStart + buffer.lineLength(visible.line);
@@ -690,12 +762,29 @@ void plume::TextView::doLayout(Renderer& renderer) {
         if (right <= left) {
           continue;
         }
-        Box* node = box(pool, used, m_content, z);
-        node->setFill(fill);
-        node->setRadius(2.0F);
-        node->setPosition(kTextPadding + left - scrollX, visible.y + static_cast<float>(row) * rowHeight);
-        node->setSize(right - left, rowHeight);
+        marked.push_back(
+            {.left = kTextPadding + left - scrollX, .right = kTextPadding + right - scrollX,
+             .top = visible.y + static_cast<float>(row) * rowHeight}
+        );
       }
+    }
+    constexpr float kRadius = 4.0F;
+    for (std::size_t i = 0; i < marked.size(); ++i) {
+      const MarkedRow& row = marked[i];
+      const MarkedRow* above = i > 0 && marked[i - 1].top + rowHeight == row.top ? &marked[i - 1] : nullptr;
+      const MarkedRow* below = i + 1 < marked.size() && row.top + rowHeight == marked[i + 1].top ? &marked[i + 1] : nullptr;
+      // A corner is round where no neighbouring row covers it.
+      const auto corner = [&row](const MarkedRow* other, bool leftSide) {
+        const bool covered =
+            other && (leftSide ? other->left <= row.left + 0.5F && other->right > row.left
+                               : other->right >= row.right - 0.5F && other->left < row.right);
+        return covered ? 0.0F : kRadius;
+      };
+      Box* node = box(pool, used, m_content, z);
+      node->setFill(fill);
+      node->setRadii(Radii(corner(above, true), corner(above, false), corner(below, false), corner(below, true)));
+      node->setPosition(row.left, row.top);
+      node->setSize(row.right - row.left, rowHeight);
     }
   };
 
@@ -724,12 +813,31 @@ void plume::TextView::doLayout(Renderer& renderer) {
       if (right < -kTextPadding || left > textWidth + kRightPadding || top + rowHeight < 0.0F || top > viewHeight) {
         continue;
       }
-      TextNode* text = textNode(m_textNodes, usedText, m_content);
-      text->setFontFamily(m_options.fontFamily);
-      text->setFontSize(m_options.fontSize);
-      text->setText(layout.display.substr(layout.shown[from], layout.shown[to] - layout.shown[from]));
-      text->setColor(textColor);
-      text->setPosition(kTextPadding + left, top + m_baseline);
+      // One node per stretch of one color; blanks join the stretch before them.
+      const std::size_t lineStart = buffer.lineStart(visible.line);
+      const bool colored = styled && !(visible.line == cursorLine && !m_preedit.empty());
+      const auto styleAt = [&](std::size_t stop) {
+        const std::size_t offset = lineStart + layout.stops[stop];
+        return colored && offset >= m_stylesBegin && offset - m_stylesBegin < m_styles.size()
+            ? m_styles[offset - m_stylesBegin]
+            : TokenStyle::None;
+      };
+      for (std::size_t run = from; run < to;) {
+        const TokenStyle style = styleAt(run);
+        std::size_t end = run + 1;
+        while (end < to && (layout.display[layout.shown[end]] == ' ' || styleAt(end) == style)) {
+          ++end;
+        }
+        TextNode* text = textNode(m_textNodes, usedText, m_content);
+        text->setFontFamily(m_options.fontFamily);
+        text->setFontSize(m_options.fontSize);
+        text->setText(layout.display.substr(layout.shown[run], layout.shown[end] - layout.shown[run]));
+        text->setColor(colored ? colors[static_cast<std::size_t>(style)] : textColor);
+        text->setPosition(
+            kTextPadding + layout.x[run] - layout.x[layout.rowBegin(row)] - scrollX, top + m_baseline
+        );
+        run = end;
+      }
     }
   }
 
@@ -1069,6 +1177,16 @@ void plume::TextView::replaceMatches(const std::vector<Match>& matches, const st
   m_selection = after;
   m_goalX = -1.0F;
   changed();
+}
+
+void plume::TextView::setSyntax(SyntaxSource* syntax) {
+  if (m_syntax == syntax) {
+    return;
+  }
+  m_syntax = syntax;
+  m_styles.clear();
+  m_stylesRevision = 0;
+  markLayoutDirty();
 }
 
 void plume::TextView::setMatches(std::vector<Match> matches, std::optional<std::size_t> current) {

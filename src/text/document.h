@@ -3,6 +3,7 @@
 #include "text/buffer.h"
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -25,6 +26,25 @@ namespace plume {
   enum class EditKind { Discrete, Typing, Backspace, Delete };
 
   enum class LineEnding { Lf, CrLf };
+
+  // A position as a line and the bytes into it.
+  struct TextPoint {
+    std::size_t line = 0;
+    std::size_t column = 0;
+  };
+
+  // One replacement in the buffer, told to whoever follows the text (the syntax tree): the bytes
+  // [offset, oldEnd) became [offset, newEnd).
+  struct TextChange {
+    std::size_t offset = 0;
+    std::size_t oldEnd = 0;
+    std::size_t newEnd = 0;
+    TextPoint start;
+    TextPoint oldEndPoint;
+    TextPoint newEndPoint;
+    // The whole text was replaced; the other fields mean nothing.
+    bool reset = false;
+  };
 
   // One open text: the buffer and its undo history. Every change goes through edit() or a group.
   class Document {
@@ -53,6 +73,9 @@ namespace plume {
     std::optional<Selection> undo();
     std::optional<Selection> redo();
 
+    // Called for every change of the buffer, undo and redo included. One observer at a time.
+    void setObserver(std::function<void(const TextChange&)> observer) { m_observer = std::move(observer); }
+
     bool modified() const noexcept { return !m_savedDepth || *m_savedDepth != m_undo.size(); }
     void markSaved();
     // The text differs from the file although the history says otherwise (a restored draft).
@@ -72,9 +95,13 @@ namespace plume {
     };
 
     void apply(std::size_t offset, std::size_t length, std::string_view text, Step& step);
+    // The one place the buffer changes: replaces and tells the observer.
+    void mutate(std::size_t offset, std::size_t length, std::string_view text);
+    TextPoint pointOf(std::size_t offset) const;
     bool continues(const Step& step, std::size_t offset, std::size_t length, std::string_view text, EditKind kind) const;
 
     Buffer m_buffer;
+    std::function<void(const TextChange&)> m_observer;
     std::vector<Step> m_undo;
     std::vector<Step> m_redo;
     std::optional<Step> m_group;

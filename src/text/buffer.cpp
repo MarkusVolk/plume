@@ -124,6 +124,15 @@ std::string plume::Buffer::lineText(std::size_t line) const {
   return text(start, lineEnd(line) - start);
 }
 
+std::string_view plume::Buffer::chunkAt(std::size_t offset) const {
+  if (offset >= m_size) {
+    return {};
+  }
+  const auto [at, within] = locate(offset);
+  const Piece& piece = m_pieces[at];
+  return std::string_view(bytes(piece)).substr(piece.start + within, piece.length - within);
+}
+
 char plume::Buffer::byteAt(std::size_t offset) const {
   if (offset >= m_size) {
     return '\0';

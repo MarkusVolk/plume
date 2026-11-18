@@ -1,2 +1,3 @@
 option('tests', type: 'feature', value: 'auto', description: 'Build tests (auto: debug builds)')
 option('build_revision', type: 'string', value: 'unknown', description: 'Explicit build revision metadata')
+option('test_grammars', type: 'string', value: '', description: 'Folder with parsers/ and queries/ for the syntax test; without it that part is skipped')

@@ -52,6 +52,7 @@ void plume::SettingsStore::read(const std::filesystem::path& path) {
   flag("highlight_current_line", editor.highlightCurrentLine);
   flag("auto_indent", editor.autoIndent);
   flag("insert_spaces", editor.insertSpaces);
+  flag("syntax_highlighting", m_settings.syntaxHighlighting);
 }
 
 void plume::SettingsStore::save(const Settings& settings) {
@@ -71,6 +72,7 @@ void plume::SettingsStore::save(const Settings& settings) {
            {"highlight_current_line", editor.highlightCurrentLine},
            {"auto_indent", editor.autoIndent},
            {"insert_spaces", editor.insertSpaces},
+           {"syntax_highlighting", settings.syntaxHighlighting},
        }},
   };
   std::ostringstream text;

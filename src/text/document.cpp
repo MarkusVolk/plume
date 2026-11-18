@@ -2,8 +2,31 @@
 
 #include <utility>
 
+plume::TextPoint plume::Document::pointOf(std::size_t offset) const {
+  const std::size_t line = m_buffer.lineOf(offset);
+  return {.line = line, .column = offset - m_buffer.lineStart(line)};
+}
+
+void plume::Document::mutate(std::size_t offset, std::size_t length, std::string_view text) {
+  if (!m_observer) {
+    m_buffer.erase(offset, length);
+    m_buffer.insert(offset, text);
+    return;
+  }
+  TextChange change{.offset = offset, .oldEnd = offset + length, .newEnd = offset + text.size()};
+  change.start = pointOf(offset);
+  change.oldEndPoint = pointOf(change.oldEnd);
+  m_buffer.erase(offset, length);
+  m_buffer.insert(offset, text);
+  change.newEndPoint = pointOf(change.newEnd);
+  m_observer(change);
+}
+
 void plume::Document::setText(std::string text) {
   m_buffer = Buffer(std::move(text));
+  if (m_observer) {
+    m_observer({.reset = true});
+  }
   m_undo.clear();
   m_redo.clear();
   m_group.reset();
@@ -13,8 +36,7 @@ void plume::Document::setText(std::string text) {
 
 void plume::Document::apply(std::size_t offset, std::size_t length, std::string_view text, Step& step) {
   Change change{.offset = offset, .removed = m_buffer.text(offset, length), .inserted = std::string(text)};
-  m_buffer.erase(offset, change.removed.size());
-  m_buffer.insert(offset, text);
+  mutate(offset, change.removed.size(), text);
   step.changes.push_back(std::move(change));
 }
 
@@ -59,10 +81,10 @@ void plume::Document::edit(
     Change& last = step.changes.front();
     if (kind == EditKind::Typing) {
       last.inserted.append(text);
-      m_buffer.insert(offset, text);
+      mutate(offset, 0, text);
     } else {
       const std::string removed = m_buffer.text(offset, length);
-      m_buffer.erase(offset, length);
+      mutate(offset, length, {});
       if (kind == EditKind::Backspace) {
         last.removed.insert(0, removed);
         last.offset = offset;
@@ -119,8 +141,7 @@ std::optional<plume::Selection> plume::Document::undo() {
   Step step = std::move(m_undo.back());
   m_undo.pop_back();
   for (auto change = step.changes.rbegin(); change != step.changes.rend(); ++change) {
-    m_buffer.erase(change->offset, change->inserted.size());
-    m_buffer.insert(change->offset, change->removed);
+    mutate(change->offset, change->inserted.size(), change->removed);
   }
   const Selection selection = step.before;
   m_redo.push_back(std::move(step));
@@ -135,8 +156,7 @@ std::optional<plume::Selection> plume::Document::redo() {
   Step step = std::move(m_redo.back());
   m_redo.pop_back();
   for (const Change& change : step.changes) {
-    m_buffer.erase(change.offset, change.removed.size());
-    m_buffer.insert(change.offset, change.inserted);
+    mutate(change.offset, change.removed.size(), change.inserted);
   }
   const Selection selection = step.after;
   m_undo.push_back(std::move(step));

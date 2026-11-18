@@ -91,6 +91,22 @@ files_lib = static_library('plume-files',
 )
 files_dep = declare_dependency(link_with: files_lib, include_directories: src_inc, dependencies: [text_dep, gio, tomlplusplus])
 
+# Syntax trees and the colors that follow from them. Parsers are loaded at run time.
+tree_sitter = dependency('tree-sitter', version: '>=0.25')
+syntax_lib = static_library('plume-syntax',
+  files(
+    'src/syntax/grammar.cpp',
+    'src/syntax/highlighter.cpp',
+    'src/syntax/token_style.cpp',
+  ),
+  include_directories: src_inc,
+  dependencies: [text_dep, tree_sitter, cpp.find_library('dl', required: false)],
+)
+syntax_dep = declare_dependency(
+  link_with: syntax_lib, include_directories: src_inc,
+  dependencies: [text_dep, tree_sitter, cpp.find_library('dl', required: false)],
+)
+
 # The editing surface, without the application around it: the view tests drive it headless.
 view_lib = static_library('plume-view',
   files('src/ui/text_view.cpp'),

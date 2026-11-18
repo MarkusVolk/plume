@@ -64,6 +64,7 @@ enum class plume::EditorWindow::Command : std::int32_t {
   LineNumbers,
   Wrap,
   HighlightLine,
+  Syntax,
   InsertSpaces,
   TabWidth2,
   TabWidth4,
@@ -125,6 +126,7 @@ plume::EditorWindow::EditorWindow(Services services, const Session& session)
         tab.draft = saved.draft;
         tab.draftRevision = tab.document->buffer().revision();
         tab.view->documentReplaced();
+        attachSyntax(tab);
         restored = true;
       }
     }
@@ -198,6 +200,25 @@ std::optional<plume::EditorWindow::DiskStamp> plume::EditorWindow::stampOf(const
   return error ? std::nullopt : std::optional(stamp);
 }
 
+void plume::EditorWindow::attachSyntax(Tab& tab) {
+  const Buffer& buffer = tab.document->buffer();
+  std::string language;
+  if (m_settings.syntaxHighlighting && !tab.readOnly) {
+    language = detectLanguage(tab.path, buffer.text(0, std::min<std::size_t>(buffer.lineLength(0), 200)));
+  }
+  if (language == tab.language && (tab.syntax != nullptr || language.empty())) {
+    return;
+  }
+  tab.view->setSyntax(nullptr);
+  tab.document->setObserver({});
+  tab.syntax = language.empty() ? nullptr : Highlighter::create(language, buffer);
+  tab.language = tab.syntax ? language : std::string();
+  if (tab.syntax) {
+    tab.document->setObserver([syntax = tab.syntax.get()](const TextChange& change) { syntax->edited(change); });
+    tab.view->setSyntax(tab.syntax.get());
+  }
+}
+
 bool plume::EditorWindow::load(Tab& tab) {
   auto loaded = loadFile(tab.path);
   if (!loaded) {
@@ -210,6 +231,7 @@ bool plume::EditorWindow::load(Tab& tab) {
   tab.document->setText(std::move(loaded->text));
   tab.view->documentReplaced();
   tab.stamp = stampOf(tab.path);
+  attachSyntax(tab);
   return true;
 }
 
@@ -242,6 +264,7 @@ void plume::EditorWindow::openFile(const std::filesystem::path& path) {
     }
     return;
   }
+  attachSyntax(tab);
   select(reuse ? 0 : m_tabs.size() - 1);
 }
 
@@ -385,6 +408,7 @@ void plume::EditorWindow::saveAs(std::uint64_t id, std::function<void()> then) {
         }
         Tab& target = *m_tabs[at];
         target.path = paths.front().lexically_normal();
+        attachSyntax(target);
         if (write(target) && then) {
           then();
         }
@@ -553,6 +577,13 @@ void plume::EditorWindow::run(Command command) {
     editor.highlightCurrentLine = !editor.highlightCurrentLine;
     applyOptions();
     break;
+  case Command::Syntax:
+    m_settings.syntaxHighlighting = !m_settings.syntaxHighlighting;
+    for (const auto& each : m_tabs) {
+      attachSyntax(*each);
+    }
+    applyOptions();
+    break;
   case Command::InsertSpaces:
     editor.insertSpaces = !editor.insertSpaces;
     applyOptions();
@@ -635,6 +666,7 @@ bool plume::EditorWindow::action(const std::string& name, const std::string& par
       {"line-numbers", Command::LineNumbers},
       {"wrap", Command::Wrap},
       {"highlight-line", Command::HighlightLine},
+      {"syntax-highlighting", Command::Syntax},
       {"zoom-in", Command::ZoomIn},
       {"zoom-out", Command::ZoomOut},
       {"zoom-reset", Command::ZoomReset},
@@ -657,6 +689,19 @@ bool plume::EditorWindow::action(const std::string& name, const std::string& par
     const Buffer& buffer = tab->document->buffer();
     tab->view->setSelection(Selection::at(buffer.lineStart(std::min(line, buffer.lineCount() - 1))));
     tab->view->centerCursor();
+    return true;
+  }
+  if (name == "select-lines" && tab) {
+    // "3-7": from the start of line 3 into line 7.
+    const Buffer& buffer = tab->document->buffer();
+    const std::size_t dash = parameter.find('-');
+    const auto line = [&buffer](const std::string& text) {
+      const auto number = static_cast<std::size_t>(std::max(1L, std::atol(text.c_str()))) - 1;
+      return std::min(number, buffer.lineCount() - 1);
+    };
+    const std::size_t first = line(parameter.substr(0, dash));
+    const std::size_t last = dash == std::string::npos ? first : line(parameter.substr(dash + 1));
+    tab->view->setSelection({.anchor = buffer.lineStart(first), .cursor = buffer.lineEnd(last)});
     return true;
   }
   for (const auto& [candidate, command] : kActions) {
@@ -716,6 +761,7 @@ void plume::EditorWindow::showMainMenu() {
       check(Command::LineNumbers, "Line Numbers", editor.lineNumbers, "F7"),
       check(Command::Wrap, "Wrap Lines", editor.wrap, "F8"),
       check(Command::HighlightLine, "Highlight Current Line", editor.highlightCurrentLine),
+      check(Command::Syntax, "Syntax Highlighting", m_settings.syntaxHighlighting),
       {.id = id(Command::ZoomIn), .label = "Zoom In", .shortcut = "Ctrl++"},
       {.id = id(Command::ZoomOut), .label = "Zoom Out", .shortcut = "Ctrl+-"},
       {.id = id(Command::ZoomReset), .label = "Reset Zoom", .shortcut = "Ctrl+0"},
@@ -1210,8 +1256,8 @@ void plume::EditorWindow::prepare() {
       tab.readOnly
           ? std::string("Binary, read-only")
           : std::format(
-                "{}{}   {}   {} {}", tab.format.encoding, tab.format.byteOrderMark ? " BOM" : "",
-                tab.format.lineEnding == LineEnding::CrLf ? "CRLF" : "LF",
+                "{}{}{}   {}   {} {}", tab.language.empty() ? std::string() : tab.language + "   ", tab.format.encoding,
+                tab.format.byteOrderMark ? " BOM" : "", tab.format.lineEnding == LineEnding::CrLf ? "CRLF" : "LF",
                 m_settings.editor.insertSpaces ? "Spaces" : "Tab", m_settings.editor.tabWidth
             )
   );

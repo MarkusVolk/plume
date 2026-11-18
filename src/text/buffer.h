@@ -29,6 +29,9 @@ namespace plume {
     std::string text(std::size_t offset, std::size_t length) const;
     std::string text() const { return text(0, m_size); }
     std::string lineText(std::size_t line) const;
+    // The stored bytes from `offset` up to the end of the piece that holds it, without copying;
+    // empty past the end. Valid until the next edit.
+    std::string_view chunkAt(std::size_t offset) const;
     // The byte at offset, or '\0' past the end.
     char byteAt(std::size_t offset) const;
 

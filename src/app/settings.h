@@ -9,6 +9,7 @@
 namespace plume {
   struct Settings {
     TextViewOptions editor;
+    bool syntaxHighlighting = true;
     bool operator==(const Settings&) const = default;
   };
 

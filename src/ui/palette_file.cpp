@@ -130,3 +130,25 @@ std::expected<Palette, std::string> plume::loadPalette(const std::filesystem::pa
   text << file.rdbuf();
   return parsePalette(text.str(), path.string(), base);
 }
+
+plume::TextView::SyntaxColors plume::loadSyntaxColors(const std::filesystem::path& path) {
+  TextView::SyntaxColors colors;
+  toml::table table;
+  try {
+    table = toml::parse_file(path.string());
+  } catch (const std::exception&) {
+    return colors;
+  }
+  const auto* syntax = table["syntax"].as_table();
+  if (!syntax) {
+    return colors;
+  }
+  for (std::size_t i = 1; i < colors.size(); ++i) {
+    const auto* value = (*syntax)[styleName(static_cast<TokenStyle>(i))].as_string();
+    Color color;
+    if (value && tryParseHexColor(value->get(), color)) {
+      colors[i] = color;
+    }
+  }
+  return colors;
+}

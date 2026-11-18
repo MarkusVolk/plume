@@ -48,6 +48,20 @@ Unsaved texts are kept in `~/.local/share/plume/drafts` and the open tabs in
 `~/.local/state/plume/session.toml`, so quitting never asks and never loses anything. Closing a
 single tab with unsaved changes does ask.
 
+## Syntax highlighting
+
+Plume colors code with [tree-sitter](https://tree-sitter.github.io). It brings no grammars of its
+own: for a language it needs the parser as `<language>.so` (exporting `tree_sitter_<language>`)
+and the query `<language>/highlights.scm`, optionally `injections.scm` for embedded languages
+such as shell in BitBake recipes or code blocks in Markdown. They are looked for in
+
+- parsers: `$PLUME_PARSER_PATH`, `~/.local/share/plume/parsers`, `/usr/lib/tree-sitter`,
+  `/usr/lib/nvim/parser` (shared with neovim)
+- queries: `$PLUME_QUERY_PATH`, `~/.local/share/plume/queries`, `/usr/share/tree-sitter/queries`
+
+A file without a grammar is plain text; texts over 8 MB are not parsed. The colors come from the
+`[syntax]` table of `colors.toml`, which the template fills from the terminal palette.
+
 ## Settings
 
 Defaults go into `~/.config/plume/config.toml`; what the menu changes is written to
@@ -63,6 +77,7 @@ line_numbers = true
 wrap = true
 highlight_current_line = true
 auto_indent = true
+syntax_highlighting = true
 ```
 
 ## Actions over D-Bus
@@ -78,7 +93,7 @@ busctl --user call de.flk.Plume /de/flk/Plume org.freedesktop.Application \
 Actions: `new-tab`, `open`, `save`, `save-as`, `close-tab`, `quit`, `undo`, `redo`, `cut`, `copy`,
 `paste`, `select-all`, `find`, `replace`, `sort-lines`, `sort-lines-descending`,
 `sort-lines-unique`, `line-numbers`, `wrap`, `highlight-line`, `zoom-in`, `zoom-out`, `zoom-reset`,
-`menu`, `insert-text <text>`, `go-to-line <number>`.
+`syntax-highlighting`, `menu`, `insert-text <text>`, `go-to-line <number>`, `select-lines <first>-<last>`.
 
 ## Colours
 

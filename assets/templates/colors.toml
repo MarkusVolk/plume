@@ -37,3 +37,23 @@ shadow = "{{ colors.shadow.default.hex }}"
 scrim = "{{ colors.scrim.default.hex }}"
 hover = "{{ colors.hover.default.hex }}"
 on_hover = "{{ colors.on_hover.default.hex }}"
+
+# Colors of syntax highlighting, from the terminal palette so code looks like it does in the
+# terminal. Every key is optional; what is left out is mixed from the colors above.
+[syntax]
+comment = "{{ colors.terminal_bright_black.default.hex }}"
+keyword = "{{ colors.terminal_normal_magenta.default.hex }}"
+string = "{{ colors.terminal_normal_green.default.hex }}"
+escape = "{{ colors.terminal_bright_cyan.default.hex }}"
+number = "{{ colors.terminal_normal_yellow.default.hex }}"
+constant = "{{ colors.terminal_normal_yellow.default.hex }}"
+function = "{{ colors.terminal_normal_blue.default.hex }}"
+type = "{{ colors.terminal_normal_cyan.default.hex }}"
+property = "{{ colors.terminal_bright_blue.default.hex }}"
+builtin = "{{ colors.terminal_normal_red.default.hex }}"
+heading = "{{ colors.terminal_bright_magenta.default.hex }}"
+link = "{{ colors.terminal_normal_cyan.default.hex }}"
+emphasis = "{{ colors.terminal_bright_yellow.default.hex }}"
+added = "{{ colors.terminal_normal_green.default.hex }}"
+removed = "{{ colors.terminal_normal_red.default.hex }}"
+changed = "{{ colors.terminal_normal_yellow.default.hex }}"
