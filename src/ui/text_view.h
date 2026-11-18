@@ -103,6 +103,8 @@ namespace plume {
 
     InputArea* inputArea() const noexcept { return m_area; }
     static void setClipboard(TextClipboard* clipboard) noexcept;
+    // What is marked goes here, and a middle click pastes from it; null without one.
+    static void setPrimarySelection(TextClipboard* selection) noexcept;
     // Colors of the syntax styles that the theme sets itself; the others are mixed from the palette.
     using SyntaxColors = std::array<std::optional<Color>, static_cast<std::size_t>(TokenStyle::Count)>;
     static void setSyntaxColors(const SyntaxColors& colors);
@@ -189,6 +191,9 @@ namespace plume {
     void pointerMotion(const InputArea::PointerData& data);
     void changed();
     void cursorMoved();
+    // Offers the marked text as the primary selection.
+    void publishSelection();
+    void pastePrimary(std::size_t offset);
     void restartBlink();
     void applyPalette();
     void clearPreedit();

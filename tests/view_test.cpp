@@ -260,6 +260,25 @@ int main() {
     f.key(XKB_KEY_Page_Down);
     CHECK(f.view.cursorLine() == 9);
   }
+  {
+    // Marking offers the text as the primary selection; a middle click pastes it where it lands.
+    FakeClipboard primary;
+    TextView::setPrimarySelection(&primary);
+    Fixture f("alpha beta\ngamma");
+    f.key(XKB_KEY_Right, kCtrl | kShift);
+    CHECK(primary.text == "alpha");
+    // A drag offers its text once the button is let go.
+    primary.text.reset();
+    f.view.inputArea()->dispatchPress(52.0F + 6.0F * 8.0F + 1.0F, 5.0F, BTN_LEFT, true, 0, 0, 1, 9000);
+    f.view.inputArea()->dispatchMotion(52.0F + 10.0F * 8.0F + 1.0F, 5.0F);
+    CHECK(!primary.text);
+    f.view.inputArea()->dispatchPress(52.0F + 10.0F * 8.0F + 1.0F, 5.0F, BTN_LEFT, false, 0, 0, 2, 9010);
+    CHECK(primary.text == "beta");
+    f.view.inputArea()->dispatchPress(52.0F + 5.0F * 8.0F + 1.0F, 25.0F, BTN_MIDDLE, true, 0, 0, 3, 9500);
+    f.layout();
+    CHECK(f.text() == "alpha beta\ngammabeta");
+    TextView::setPrimarySelection(nullptr);
+  }
   TextView::setClipboard(nullptr);
   return 0;
 }

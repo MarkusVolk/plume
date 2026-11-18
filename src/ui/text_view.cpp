@@ -20,6 +20,7 @@
 
 namespace {
   TextClipboard* g_clipboard = nullptr;
+  TextClipboard* g_primary = nullptr;
   plume::TextView::SyntaxColors g_syntaxColors;
 
   // Longest run of text handed to the text renderer as one node.
@@ -119,6 +120,8 @@ std::size_t plume::TextView::LineLayout::stopOf(std::size_t column) const {
 }
 
 void plume::TextView::setClipboard(TextClipboard* clipboard) noexcept { g_clipboard = clipboard; }
+
+void plume::TextView::setPrimarySelection(TextClipboard* selection) noexcept { g_primary = selection; }
 
 void plume::TextView::setSyntaxColors(const SyntaxColors& colors) { g_syntaxColors = colors; }
 
@@ -966,7 +969,31 @@ void plume::TextView::changed() {
   cursorMoved();
 }
 
+void plume::TextView::publishSelection() {
+  if (g_primary && m_document && !m_selection.empty()) {
+    g_primary->setClipboardText(selectedText());
+  }
+}
+
+void plume::TextView::pastePrimary(std::size_t offset) {
+  if (m_readOnly || !g_primary || !m_document) {
+    return;
+  }
+  g_primary->requestClipboardText([this, offset, alive = std::weak_ptr<int>(m_alive)](std::optional<std::string> text) {
+    if (alive.expired() || !text || text->empty() || !m_document || !isValidUtf8(*text)) {
+      return;
+    }
+    const std::size_t at = std::min(offset, m_document->buffer().size());
+    m_selection = Selection::at(at);
+    edit(at, 0, *text, at + text->size(), EditKind::Discrete);
+  });
+}
+
 void plume::TextView::cursorMoved() {
+  // A drag offers its text once, when the button is let go.
+  if (!m_dragging) {
+    publishSelection();
+  }
   restartBlink();
   markLayoutDirty();
   notifyInputMethod(TextInputChangeCause::Other);
@@ -1498,14 +1525,19 @@ void plume::TextView::pointerPress(const InputArea::PointerData& data) {
     return;
   }
   if (!data.pressed) {
-    if (data.button == BTN_LEFT) {
+    if (data.button == BTN_LEFT && m_dragging) {
       m_dragging = false;
       m_dragScroll.stop();
+      publishSelection();
     }
     return;
   }
   clearPreedit();
   const std::size_t offset = offsetAtPoint(data.localX, data.localY);
+  if (data.button == BTN_MIDDLE) {
+    pastePrimary(offset);
+    return;
+  }
   if (data.button == BTN_RIGHT) {
     if (offset < m_selection.begin() || offset > m_selection.end() || m_selection.empty()) {
       moveTo(offset, false);

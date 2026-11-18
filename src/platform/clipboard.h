@@ -7,14 +7,21 @@
 #include <memory>
 #include <wayland-client.h>
 
+struct zwp_primary_selection_device_manager_v1;
+
 namespace plume {
-  // Plain-text clipboard over the seat's data device: offers what was copied here and reads what
-  // other clients offer without blocking the window.
+  // Plain text over one of the seat's selections: the clipboard (Ctrl+C, Ctrl+V) or the primary
+  // selection (what is marked, pasted with a middle click). Offers what was set here and reads
+  // what other clients offer without blocking the window.
   class WaylandClipboard final : public TextClipboard {
   public:
     // `serial` yields the input serial that authorises setting the selection, 0 when there is none.
-    WaylandClipboard(
-        wl_display* display, wl_data_device_manager* manager, wl_seat* seat, std::function<std::uint32_t()> serial
+    using SerialSource = std::function<std::uint32_t()>;
+    static std::unique_ptr<WaylandClipboard>
+    clipboard(wl_display* display, wl_data_device_manager* manager, wl_seat* seat, SerialSource serial);
+    // Null when the compositor offers no primary selection.
+    static std::unique_ptr<WaylandClipboard> primary(
+        wl_display* display, zwp_primary_selection_device_manager_v1* manager, wl_seat* seat, SerialSource serial
     );
     ~WaylandClipboard() override;
     WaylandClipboard(const WaylandClipboard&) = delete;
@@ -26,6 +33,7 @@ namespace plume {
 
   private:
     struct State;
+    explicit WaylandClipboard(std::shared_ptr<State> state);
     std::shared_ptr<State> m_state;
   };
 } // namespace plume

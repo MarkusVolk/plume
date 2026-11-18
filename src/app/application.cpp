@@ -128,15 +128,20 @@ int plume::runApplication(const std::vector<std::string>& files) {
     }
     connection.setTextInputService(&textInput);
     auto& desktop = connection.extension<DesktopIntegration>();
-    WaylandClipboard clipboard(connection.display(), desktop.dataDeviceManager(), connection.seat(), [&connection] {
-      return connection.lastKeyboardSurface() ? connection.lastInputSerial() : 0;
+    const auto serial = [&connection] { return connection.lastKeyboardSurface() ? connection.lastInputSerial() : 0; };
+    const auto clipboard = WaylandClipboard::clipboard(connection.display(), desktop.dataDeviceManager(), connection.seat(), serial);
+    // The primary selection follows the last pointer or key event, whichever window it was in.
+    const auto primary = WaylandClipboard::primary(connection.display(), desktop.primarySelection(), connection.seat(), [&connection] {
+      return connection.lastInputSerial();
     });
-    Input::setTextClipboard(&clipboard);
-    TextView::setClipboard(&clipboard);
+    Input::setTextClipboard(clipboard.get());
+    TextView::setClipboard(clipboard.get());
+    TextView::setPrimarySelection(primary.get());
     struct ClipboardBinding {
       ~ClipboardBinding() {
         Input::setTextClipboard(nullptr);
         plume::TextView::setClipboard(nullptr);
+        plume::TextView::setPrimarySelection(nullptr);
       }
     } clipboardBinding;
     GlSharedContext graphics;

@@ -36,6 +36,9 @@ xkbcommon, tomlplusplus, nlohmann_json and the stb headers.
 | F10 | Menu |
 | Ctrl+Q | Quit; unsaved texts come back on the next start |
 
+Marked text becomes the primary selection, and a middle click pastes the primary selection where
+it lands, when the compositor offers the primary-selection protocol.
+
 Replacement text of a regular-expression search may refer to groups with `\1` or `\g<name>`.
 
 ## Files

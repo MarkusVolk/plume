@@ -12,6 +12,7 @@ struct wl_data_device_manager;
 struct wl_surface;
 struct zxdg_decoration_manager_v1;
 struct zxdg_exporter_v2;
+struct zwp_primary_selection_device_manager_v1;
 struct PointerEvent;
 class WaylandConnection;
 
@@ -34,16 +35,18 @@ namespace plume {
     wl_data_device_manager* dataDeviceManager() const { return m_dataDeviceManager; }
     zxdg_decoration_manager_v1* decorationManager() const { return m_decorations; }
     zxdg_exporter_v2* exporter() const { return m_exporter; }
+    zwp_primary_selection_device_manager_v1* primarySelection() const { return m_primarySelection; }
 
   private:
     WaylandConnection& m_connection;
     wl_data_device_manager* m_dataDeviceManager = nullptr;
     zxdg_decoration_manager_v1* m_decorations = nullptr;
     zxdg_exporter_v2* m_exporter = nullptr;
+    zwp_primary_selection_device_manager_v1* m_primarySelection = nullptr;
     wl_cursor_theme* m_cursorTheme = nullptr;
     wl_surface* m_cursorSurface = nullptr;
     std::uint32_t m_dataGlobal = 0, m_decorationGlobal = 0, m_shapeGlobal = 0;
-    std::uint32_t m_exporterGlobal = 0;
+    std::uint32_t m_exporterGlobal = 0, m_primaryGlobal = 0;
     std::uint32_t m_enterSerial = 0, m_activationGlobal = 0;
     std::unique_ptr<LaunchActivation> m_activation;
   };

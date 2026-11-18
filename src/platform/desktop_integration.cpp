@@ -2,6 +2,7 @@
 
 #include "cursor-shape-v1-client-protocol.h"
 #include "platform/launch_activation.h"
+#include "primary-selection-unstable-v1-client-protocol.h"
 #include "wayland/wayland_connection.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
@@ -45,6 +46,11 @@ void plume::DesktopIntegration::onGlobal(
         wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1)
     );
     m_decorationGlobal = name;
+  } else if (interface == "zwp_primary_selection_device_manager_v1" && !m_primarySelection) {
+    m_primarySelection = static_cast<zwp_primary_selection_device_manager_v1*>(
+        wl_registry_bind(registry, name, &zwp_primary_selection_device_manager_v1_interface, 1)
+    );
+    m_primaryGlobal = name;
   } else if (interface == "zxdg_exporter_v2" && !m_exporter) {
     m_exporter = static_cast<zxdg_exporter_v2*>(wl_registry_bind(registry, name, &zxdg_exporter_v2_interface, 1));
     m_exporterGlobal = name;
@@ -70,6 +76,11 @@ void plume::DesktopIntegration::onGlobalRemove(std::uint32_t name) {
     zxdg_decoration_manager_v1_destroy(m_decorations);
     m_decorations = nullptr;
     m_decorationGlobal = 0;
+  }
+  if (name == m_primaryGlobal) {
+    zwp_primary_selection_device_manager_v1_destroy(m_primarySelection);
+    m_primarySelection = nullptr;
+    m_primaryGlobal = 0;
   }
   if (name == m_exporterGlobal) {
     zxdg_exporter_v2_destroy(m_exporter);
@@ -99,6 +110,11 @@ void plume::DesktopIntegration::releaseGlobals() {
     zxdg_decoration_manager_v1_destroy(m_decorations);
     m_decorations = nullptr;
   }
+  if (m_primarySelection) {
+    zwp_primary_selection_device_manager_v1_destroy(m_primarySelection);
+    m_primarySelection = nullptr;
+  }
+  m_primaryGlobal = 0;
   if (m_exporter) {
     zxdg_exporter_v2_destroy(m_exporter);
     m_exporter = nullptr;

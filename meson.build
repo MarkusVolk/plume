@@ -19,6 +19,7 @@ protocol_headers = []
 foreach protocol : [
   ['xdg-decoration-unstable-v1', 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml'],
   ['xdg-foreign-unstable-v2', 'unstable/xdg-foreign/xdg-foreign-unstable-v2.xml'],
+  ['primary-selection-unstable-v1', 'unstable/primary-selection/primary-selection-unstable-v1.xml'],
 ]
   header = custom_target(protocol[0] + '-header',
     input: protocol_root / protocol[1],
