@@ -768,23 +768,40 @@ void plume::TextView::doLayout(Renderer& renderer) {
         );
       }
     }
-    constexpr float kRadius = 4.0F;
+    static constexpr float kRadius = 4.0F;
     for (std::size_t i = 0; i < marked.size(); ++i) {
       const MarkedRow& row = marked[i];
       const MarkedRow* above = i > 0 && marked[i - 1].top + rowHeight == row.top ? &marked[i - 1] : nullptr;
       const MarkedRow* below = i + 1 < marked.size() && row.top + rowHeight == marked[i + 1].top ? &marked[i + 1] : nullptr;
-      // A corner is round where no neighbouring row covers it.
-      const auto corner = [&row](const MarkedRow* other, bool leftSide) {
-        const bool covered =
-            other && (leftSide ? other->left <= row.left + 0.5F && other->right > row.left
-                               : other->right >= row.right - 0.5F && other->left < row.right);
-        return covered ? 0.0F : kRadius;
+      // A corner no neighbouring row touches is round. Where the neighbour ends flush it is
+      // square, and where the neighbour reaches further out the edge sweeps outwards into it.
+      struct Corner {
+        float radius = 0.0F;
+        bool outwards = false;
       };
+      const auto corner = [&row](const MarkedRow* other, bool leftSide) -> Corner {
+        if (!other || other->left >= row.right || other->right <= row.left) {
+          return {.radius = kRadius, .outwards = false};
+        }
+        const float beyond = leftSide ? row.left - other->left : other->right - row.right;
+        if (std::abs(beyond) <= 0.5F) {
+          return {};
+        }
+        return {.radius = std::min(kRadius, std::abs(beyond)), .outwards = beyond > 0.0F};
+      };
+      const Corner topLeft = corner(above, true), topRight = corner(above, false);
+      const Corner bottomRight = corner(below, false), bottomLeft = corner(below, true);
+      // The sweep is drawn in a margin beside the row's own rectangle.
+      const float insetLeft = topLeft.outwards || bottomLeft.outwards ? kRadius : 0.0F;
+      const float insetRight = topRight.outwards || bottomRight.outwards ? kRadius : 0.0F;
+      const auto shape = [](const Corner& value) { return value.outwards ? CornerShape::Concave : CornerShape::Convex; };
       Box* node = box(pool, used, m_content, z);
       node->setFill(fill);
-      node->setRadii(Radii(corner(above, true), corner(above, false), corner(below, false), corner(below, true)));
-      node->setPosition(row.left, row.top);
-      node->setSize(row.right - row.left, rowHeight);
+      node->setRadii(Radii(topLeft.radius, topRight.radius, bottomRight.radius, bottomLeft.radius));
+      node->setCornerShapes({.tl = shape(topLeft), .tr = shape(topRight), .br = shape(bottomRight), .bl = shape(bottomLeft)});
+      node->setLogicalInset({.left = insetLeft, .top = 0.0F, .right = insetRight, .bottom = 0.0F});
+      node->setPosition(row.left - insetLeft, row.top);
+      node->setSize(row.right - row.left + insetLeft + insetRight, rowHeight);
     }
   };
 
