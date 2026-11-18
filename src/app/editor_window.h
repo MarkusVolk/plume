@@ -11,6 +11,7 @@
 #include "ui/controls/context_menu_popup.h"
 #include "ui/text_view.h"
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -161,6 +162,8 @@ namespace plume {
     float m_defaultFontSize = 13.0F;
     std::string m_status;
     bool m_focusPending = true;
+    // The release of the press that closed a menu belongs to nobody.
+    bool m_swallowRelease = false;
     float m_pointerX = 0.0F;
     float m_pointerY = 0.0F;
     std::uint32_t m_modifiers = 0;
@@ -174,6 +177,7 @@ namespace plume {
     std::size_t m_searchRevision = static_cast<std::size_t>(-1);
     bool m_searchStale = true;
 
+    std::chrono::steady_clock::time_point m_menuClosedAt{};
     Timer m_autosave;
     Timer m_statusTimer;
     Session m_savedSession;

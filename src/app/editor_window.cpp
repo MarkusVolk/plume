@@ -17,9 +17,12 @@
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <format>
+#include <linux/input-event-codes.h>
 #include <stdexcept>
+#include <utility>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 namespace {
@@ -28,6 +31,7 @@ namespace {
   constexpr float kSearchWidth = 440.0F;
   constexpr auto kAutosaveInterval = std::chrono::seconds(3);
   constexpr auto kStatusTime = std::chrono::seconds(6);
+  constexpr auto kMenuReopenGuard = std::chrono::milliseconds(250);
   // Drafts of texts larger than this are written less often.
   constexpr std::size_t kLargeDraft = 4U * 1024U * 1024U;
 
@@ -91,7 +95,10 @@ plume::EditorWindow::EditorWindow(Services services, const Session& session)
     m_services.connection.extension<DesktopIntegration>().setCursorShape(serial, shape);
   });
   m_menu.setOnActivate([this](const ContextMenuControlEntry& entry) { run(static_cast<Command>(entry.id)); });
-  m_menu.setOnDismissed([this] { requestUpdate(); });
+  m_menu.setOnDismissed([this] {
+    m_menuClosedAt = std::chrono::steady_clock::now();
+    requestUpdate();
+  });
   if (!m_surface.initialize(
           nullptr,
           {.width = session.width >= 360 ? session.width : 960U,
@@ -1131,7 +1138,12 @@ void plume::EditorWindow::rebuildStrip() {
            .controlHeight = Style::controlHeightSm,
            .variant = ButtonVariant::Ghost,
            .tooltip = "Menu (F10)",
-           .onClick = [this] { showMainMenu(); }}
+           .onClick = [this] {
+             // The click that dismissed the open menu must not open it again.
+             if (std::chrono::steady_clock::now() - m_menuClosedAt > kMenuReopenGuard) {
+               showMainMenu();
+             }
+           }}
       )
   );
   if (decorated) {
@@ -1395,8 +1407,21 @@ void plume::EditorWindow::keyboard(const KeyboardEvent& event) {
 }
 
 void plume::EditorWindow::pointer(const PointerEvent& event) {
-  if (m_menu.isOpen() && m_menu.onPointerEvent(event)) {
+  if (event.type == PointerEvent::Type::Button && !event.pressed && std::exchange(m_swallowRelease, false)) {
     return;
+  }
+  if (m_menu.isOpen()) {
+    // A right click anywhere, or any click beside the menu, puts it away without choosing from it.
+    if (event.type == PointerEvent::Type::Button
+        && event.pressed
+        && (event.button == BTN_RIGHT || event.surface != m_menu.wlSurface())) {
+      m_menu.close();
+      m_swallowRelease = true;
+      return;
+    }
+    if (m_menu.onPointerEvent(event)) {
+      return;
+    }
   }
   if (event.surface != m_surface.wlSurface()) {
     return;
