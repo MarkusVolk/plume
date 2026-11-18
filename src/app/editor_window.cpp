@@ -691,6 +691,16 @@ bool plume::EditorWindow::action(const std::string& name, const std::string& par
     tab->view->centerCursor();
     return true;
   }
+  if (name == "select-range" && tab) {
+    // "<anchor>-<cursor>" in bytes.
+    const std::size_t dash = parameter.find('-');
+    const auto offset = [](const std::string& text) { return static_cast<std::size_t>(std::max(0L, std::atol(text.c_str()))); };
+    tab->view->setSelection(
+        {.anchor = offset(parameter.substr(0, dash)),
+         .cursor = dash == std::string::npos ? offset(parameter) : offset(parameter.substr(dash + 1))}
+    );
+    return true;
+  }
   if (name == "select-lines" && tab) {
     // "3-7": from the start of line 3 into line 7.
     const Buffer& buffer = tab->document->buffer();

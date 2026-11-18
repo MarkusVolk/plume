@@ -96,7 +96,7 @@ busctl --user call de.flk.Plume /de/flk/Plume org.freedesktop.Application \
 Actions: `new-tab`, `open`, `save`, `save-as`, `close-tab`, `quit`, `undo`, `redo`, `cut`, `copy`,
 `paste`, `select-all`, `find`, `replace`, `sort-lines`, `sort-lines-descending`,
 `sort-lines-unique`, `line-numbers`, `wrap`, `highlight-line`, `zoom-in`, `zoom-out`, `zoom-reset`,
-`syntax-highlighting`, `menu`, `insert-text <text>`, `go-to-line <number>`, `select-lines <first>-<last>`.
+`syntax-highlighting`, `menu`, `insert-text <text>`, `go-to-line <number>`, `select-lines <first>-<last>`, `select-range <anchor>-<cursor>` (bytes).
 
 ## Colours
 

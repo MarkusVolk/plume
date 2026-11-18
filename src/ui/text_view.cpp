@@ -757,7 +757,7 @@ void plume::TextView::doLayout(Renderer& renderer) {
         float right = layout.x[b] - layout.x[rowBegin];
         // The newline a selection includes shows as a stub past the last character.
         if (newline && row + 1 == layout.rows.size()) {
-          right += digitWidth * 0.6F;
+          right += digitWidth;
         }
         if (right <= left) {
           continue;
@@ -769,6 +769,15 @@ void plume::TextView::doLayout(Renderer& renderer) {
       }
     }
     static constexpr float kRadius = 4.0F;
+    // A selection is one shape: a short row below the first one (an empty line, say) reaches over
+    // to where the first one begins instead of floating apart from it.
+    if (toLineEnd) {
+      for (std::size_t i = 1; i < marked.size(); ++i) {
+        if (marked[i - 1].top + rowHeight == marked[i].top && marked[i].right < marked[i - 1].left) {
+          marked[i].right = marked[i - 1].left;
+        }
+      }
+    }
     for (std::size_t i = 0; i < marked.size(); ++i) {
       const MarkedRow& row = marked[i];
       const MarkedRow* above = i > 0 && marked[i - 1].top + rowHeight == row.top ? &marked[i - 1] : nullptr;
@@ -780,7 +789,8 @@ void plume::TextView::doLayout(Renderer& renderer) {
         bool outwards = false;
       };
       const auto corner = [&row](const MarkedRow* other, bool leftSide) -> Corner {
-        if (!other || other->left >= row.right || other->right <= row.left) {
+        // Rows that only touch at an edge still join; a gap between them leaves both round.
+        if (!other || other->left > row.right + 0.5F || other->right < row.left - 0.5F) {
           return {.radius = kRadius, .outwards = false};
         }
         const float beyond = leftSide ? row.left - other->left : other->right - row.right;
