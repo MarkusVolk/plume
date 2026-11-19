@@ -29,6 +29,7 @@ namespace {
   constexpr float kStripHeight = Style::controlHeightSm + 2.0F * Style::spaceXs;
   constexpr float kStatusHeight = 28.0F;
   constexpr float kSearchWidth = 440.0F;
+  constexpr float kTabWidth = 200.0F;
   constexpr auto kAutosaveInterval = std::chrono::seconds(3);
   constexpr auto kStatusTime = std::chrono::seconds(6);
   constexpr auto kMenuReopenGuard = std::chrono::milliseconds(250);
@@ -1148,8 +1149,8 @@ void plume::EditorWindow::rebuildStrip() {
          .variant = ButtonVariant::Ghost,
          .customPalette = tabPalette,
          .tooltip = m_tabs[index]->path.empty() ? std::optional<std::string>() : m_tabs[index]->path.string(),
-         .minWidth = 96.0F,
-         .maxWidth = 240.0F,
+         .minWidth = kTabWidth,
+         .maxWidth = kTabWidth,
          .paddingV = 0.0F,
          .paddingH = Style::spaceXs,
          .gap = Style::spaceXs,
