@@ -16,7 +16,8 @@ PLUME_ASSETS_DIR=$PWD/lib/assets ./build/src/plume file.txt
 
 Dependencies: a C++23 compiler, Meson, wayland-scanner, wayland-protocols, wayland-client,
 wayland-cursor, wayland-egl, EGL and GLES, GLib/GIO, Pango, Cairo, HarfBuzz, FreeType, fontconfig,
-xkbcommon, tomlplusplus, nlohmann_json and the stb headers.
+xkbcommon, tomlplusplus, nlohmann_json, the stb headers and the tree-sitter library (0.25 or
+newer; grammars are optional, see below).
 
 ## Keys
 
